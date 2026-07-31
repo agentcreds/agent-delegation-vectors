@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The vectors are data, so the first job checks the data itself: that it parses, that
+  # every case carries the fields SPEC.md says its kind requires, and that names are
+  # unique. A malformed file would otherwise fail inside every consumer's adapter, where
+  # it looks like their bug.
+  validate:
+    name: validate vectors.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Structural validation
+        run: python .github/validate_vectors.py
+
+  # Then the reference run: the published SDK through the published adapter. This is the
+  # claim the repository makes - if it cannot pass its own vectors, nobody else's failure
+  # means anything.
+  reference:
+    name: reference implementation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install the reference implementation
+        run: pip install agentcreds
+      - name: Run the vectors
+        run: python runner/run_vectors.py --adapter runner/adapters/agentcreds_adapter.py
