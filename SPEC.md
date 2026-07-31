@@ -127,6 +127,7 @@ vectors should say so rather than let "13/13" imply more than it does.
 
 ## Adding a case
 
-Cases are generated, not written. Extend the generator in the AgentCreds SDK, regenerate,
-bump `format` if any runner would need to change, and update this document — a case whose
-obligation is not written down here is not testable by anyone who did not write it.
+Cases are generated, not written. Extend the generator in the reference implementation,
+regenerate, bump `format` if any runner would need to change, and update this document —
+a case whose obligation is not written down here is not testable by anyone who did not
+write it.
