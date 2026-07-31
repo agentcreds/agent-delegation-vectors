@@ -75,6 +75,17 @@ several of them at all.
 Where a case does correspond to a requirement, SPEC.md says so, and says what the case
 does *not* establish.
 
+## Current status
+
+The reference implementation passes **13/13**, verified locally against the AgentCreds
+SDK through `runner/adapters/agentcreds_adapter.py`.
+
+CI runs the structural validation of `vectors.json` on every push. It does **not** yet run
+the reference implementation, because the SDK is not published to PyPI — that job reports
+itself as not executed rather than skipping quietly, so a green tick here never reads as
+"the reference implementation passes". It starts running automatically once the package is
+installable.
+
 ## Provenance
 
 `vectors.json` is generated, never hand-edited, by

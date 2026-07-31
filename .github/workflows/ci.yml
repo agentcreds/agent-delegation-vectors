@@ -11,9 +11,11 @@ permissions:
 
 jobs:
   # The vectors are data, so the first job checks the data itself: that it parses, that
-  # every case carries the fields SPEC.md says its kind requires, and that names are
-  # unique. A malformed file would otherwise fail inside every consumer's adapter, where
-  # it looks like their bug.
+  # every case carries the fields SPEC.md says its kind requires, that names are unique,
+  # and that the multi-hop rejection case still has its control. A malformed file would
+  # otherwise fail inside every consumer's adapter, where it looks like their bug.
+  #
+  # This is the gate that always applies, because it depends on nothing external.
   validate:
     name: validate vectors.json
     runs-on: ubuntu-latest
@@ -26,8 +28,12 @@ jobs:
         run: python .github/validate_vectors.py
 
   # Then the reference run: the published SDK through the published adapter. This is the
-  # claim the repository makes - if it cannot pass its own vectors, nobody else's failure
-  # means anything.
+  # claim the repository makes about itself - if the reference implementation cannot pass
+  # its own vectors, nobody else's failure means anything.
+  #
+  # The SDK is not on PyPI yet. Rather than fail CI permanently, or - worse - quietly pass
+  # while running nothing, this job reports LOUDLY that the reference run did not execute.
+  # A skipped check that reads as a tick is how a suite comes to certify nothing.
   reference:
     name: reference implementation
     runs-on: ubuntu-latest
@@ -36,7 +42,34 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install the reference implementation
-        run: pip install agentcreds
-      - name: Run the vectors
-        run: python runner/run_vectors.py --adapter runner/adapters/agentcreds_adapter.py
+
+      - name: Is the reference implementation installable?
+        id: probe
+        run: |
+          if pip download --no-deps --dest /tmp/probe agentcreds >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reference run NOT EXECUTED (SDK not yet published)
+        if: steps.probe.outputs.available != 'true'
+        run: |
+          {
+            echo "### ⚠ Reference run did not execute"
+            echo
+            echo "\`agentcreds\` is not installable from PyPI, so the vectors were **not**"
+            echo "run against the reference implementation in this job. Only the"
+            echo "structural validation of \`vectors.json\` ran."
+            echo
+            echo "This is expected until the SDK is published. It is reported rather than"
+            echo "silently skipped so that a green tick here is never mistaken for"
+            echo "\"the reference implementation passes\"."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Reference run skipped::agentcreds is not on PyPI; vectors were not run against the reference implementation."
+
+      - name: Run the vectors against the reference implementation
+        if: steps.probe.outputs.available == 'true'
+        run: |
+          pip install agentcreds
+          python runner/run_vectors.py --adapter runner/adapters/agentcreds_adapter.py
