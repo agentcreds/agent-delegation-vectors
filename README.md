@@ -1,31 +1,53 @@
-# Agent delegation interoperability vectors
+# Agent delegation vectors
 
-Golden test vectors for **cross-organizational agent delegation**: signed credentials,
+Golden test artifacts for **cross-organizational agent delegation**: signed credentials,
 attenuated delegation tokens, proof-of-possession presentations, and revocation status
 lists, each paired with the check a relying party must perform and the answer it must
 reach.
 
-Point your implementation at `vectors.json`. If it reaches a different `accept`/`reject`
-than the file says, the two implementations will not interoperate — and you know that
-before you find out in production.
+They exist to prove that the reference implementation and its language bindings stay
+byte-compatible and reach identical authorization decisions — that a token minted through
+one surface verifies identically through another, and keeps doing so as the code changes.
 
 ```bash
-python runner/run_vectors.py --adapter <your-adapter.py>
+python runner/run_vectors.py --adapter runner/adapters/agentcreds_adapter.py
 ```
 
-## Why this exists
+## What these are, and are not
+
+**These are agreement vectors, not conformance vectors.** The distinction is not
+pedantic, and it decides what a passing result entitles you to say.
+
+Conformance vectors are derived from a published specification: you implement the spec,
+run the vectors, and passing is evidence you implemented it correctly. These are derived
+from **one implementation's behaviour**. The expected answer in every case is what the
+reference implementation does.
+
+The practical consequence: this repository lets you **check** an implementation you
+already have. It does not let you **build** one. [SPEC.md](SPEC.md) documents the vector
+file format and states precisely what each case asserts, but it does not specify the wire
+formats of the artifacts inside — the CBOR envelopes, the delegation-token block layout
+and its Datalog conventions, the credential schema. Nothing here is sufficient to write an
+independent verifier from scratch.
+
+So passing 13/13 means *"this agrees with the reference implementation"*. It does not mean
+*"this conforms to a standard"*, because no such standard is published here to conform to.
+If a wire-format specification is published later, these become conformance vectors for it
+— and this section should be rewritten when that happens, not before.
+
+## Why they exist
 
 Delegation formats fail interoperability in quiet ways. A verifier that decodes a token
 but ignores an attenuation hop still returns "valid" — it just returns it for actions the
 chain never granted. A verifier that reads a single-hop token correctly can mishandle a
-multi-hop one, because multi-hop chains use a different block-signing construction. Prose
-specifications do not catch either; a shared set of bytes with expected answers does.
+multi-hop one, because multi-hop chains use a different block-signing construction.
+Neither failure is visible from unit tests inside a single implementation; both are
+obvious the moment two surfaces are asked the same question about the same bytes.
 
-Every case here is a real artifact produced by a working implementation, not a
-hand-constructed example. See [SPEC.md](SPEC.md) for the file format and the exact
-obligation each case places on a verifier.
+Every case is a real artifact produced by a working implementation, not a hand-constructed
+example.
 
-## What it covers
+## What they cover
 
 | area | cases |
 | --- | --- |
@@ -39,12 +61,12 @@ obligation each case places on a verifier.
 The multi-hop cases carry the most weight. They exist because a wire-format change that
 broke *every* attenuated token once passed a suite whose token cases were all single-hop.
 
-## Running your implementation against them
+## The adapter seam
 
-Implement the five methods in [`runner/adapter.py`](runner/adapter.py) and point the
-harness at it. The adapter is the only thing you write; the harness owns case selection,
-decoding, comparison and reporting, so your result is comparable with anyone else's —
-neither of you got to choose which cases ran or what counted as a pass.
+The harness drives an implementation through five methods
+([`runner/adapter.py`](runner/adapter.py)); it owns case selection, decoding, comparison
+and reporting. Nothing an adapter does can change which cases run or what counts as a
+pass, so two adapters that both report 13/13 are measured identically.
 
 ```python
 class Adapter:
@@ -57,24 +79,28 @@ class Adapter:
 ```
 
 Each returns a plain bool (or, for `token_chain`, depth plus the ordered hop
-identifiers). Raising is treated as "reject", so a verifier that signals failure by
-exception needs no special handling.
+identifiers). Raising is treated as "reject", so an implementation that signals failure by
+exception needs no wrapper.
 
-The harness is standard-library Python and makes no assumption about what it is driving —
-an adapter may shell out to another language or call a service over HTTP.
+The seam is deliberately transport-agnostic — an adapter may shell out to another language
+or call a service over HTTP — because the consumers are language bindings over a shared
+core, and a new binding should be provable without changing the harness. It is written the
+way it is so that an independent implementation *could* be measured identically, should
+one ever exist; today none does, for the reason given above.
 
 ## Reference implementation
 
 [AgentCreds](https://github.com/agentcreds/agentcreds) is the reference implementation and
-the source of the artifacts in `vectors.json`.
+the source of every artifact in `vectors.json`.
 [`runner/adapters/agentcreds_adapter.py`](runner/adapters/agentcreds_adapter.py) is its
-adapter — about forty lines, and the shortest way to see what the harness expects of
-yours.
+adapter — about forty lines.
 
-Being the reference implementation confers no authority over what is correct: a case is
-correct because SPEC.md says what it asserts and the artifact demonstrably has that
-property, not because a particular implementation accepts it. If you believe a case is
-wrong, that is a bug report worth filing.
+Because the vectors are generated from it, its behaviour currently *defines* the expected
+answers. That is a property of these being agreement vectors, and it is worth stating
+plainly rather than dressing up: a case is right because the reference implementation
+produced it and SPEC.md records what it asserts. If you believe a case is wrong, that is
+a bug report worth filing — but it is a disagreement with an implementation, not with a
+specification.
 
 ## Relationship to the IETF work
 

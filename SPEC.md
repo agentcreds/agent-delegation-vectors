@@ -1,5 +1,12 @@
 # Vector file format
 
+**Scope.** This document specifies the vector *container* — the JSON envelope, the fields
+each case carries, and what each case asserts. It does **not** specify the wire formats of
+the artifacts inside: the CBOR envelopes, the delegation-token block layout and its Datalog
+conventions, or the credential schema. You can therefore verify an implementation you
+already have against these cases; you cannot write one from this document. See the README
+on why these are agreement vectors rather than conformance vectors.
+
 `vectors.json` is a single JSON object. A runner reads `format`, refuses a version it
 does not recognise, then walks `cases` in order.
 
