@@ -115,6 +115,27 @@ def run_case(impl, c: dict) -> "tuple[bool, str]":
                 c["max_age_secs"],
             )
         )
+    elif kind == "key_history":
+        # `anchor` is the pinned ROOT here, not the issuing key.
+        got = decided(
+            lambda: impl.verify_rotated_credential(
+                c["key_history_json"], c["credential_json"], anchor
+            )
+        )
+    elif kind == "approval_key":
+        action = Action(c["action"]["tool"], c["action"].get("parameters", ""))
+        got = decided(
+            lambda: impl.verify_approver_key_evidence(
+                c["evidence_json"], c["directory_json"], anchor, action
+            )
+        )
+    elif kind == "trust_config":
+        # `anchor` is the FRAMEWORK anchor for this kind.
+        got = decided(
+            lambda: impl.verify_through_trust_framework(
+                c["config_json"], c["credential_json"], anchor
+            )
+        )
     else:
         # Never skip. An unknown kind means this runner predates the vectors.
         return False, f"unknown kind {kind!r} - runner is older than the vector file"

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SUPPORTED_FORMAT = 2
+SUPPORTED_FORMAT = 3
 
 COMMON = {"name", "kind", "anchor_did"}
 REQUIRED = {
@@ -21,8 +21,20 @@ REQUIRED = {
     "token": COMMON | {"credential_json", "token_cbor_hex", "action", "expect"},
     "presentation": COMMON
     | {"presentation_cbor_hex", "challenge_cbor_hex", "action", "max_age_secs", "expect"},
-    "token_chain": COMMON | {"token_cbor_hex", "expect_depth", "expect_chain_agent_dids"},
+    # Format 3 added `expect` here, which is what the version bump records: the spec
+    # increments the format whenever a case gains a required field. Requiring it (rather
+    # than merely tolerating it) is the point of the gate - a runner that silently
+    # skipped the accept/reject check would report success for a check it never ran.
+    "token_chain": COMMON
+    | {"token_cbor_hex", "expect", "expect_depth", "expect_chain_agent_dids"},
     "revocation": COMMON | {"list_json", "revoked_index", "clear_index"},
+    # `anchor_did` carries the pinned ROOT for this kind, not the issuing key: under
+    # rotation the relying party does not know the issuer DID in advance.
+    "key_history": COMMON | {"key_history_json", "credential_json", "expect"},
+    # `anchor_did` is the ORG anchor: the directory is verified under it.
+    "approval_key": COMMON | {"directory_json", "evidence_json", "action", "expect"},
+    # `anchor_did` is the FRAMEWORK anchor, not the credential's issuer.
+    "trust_config": COMMON | {"config_json", "credential_json", "expect"},
 }
 HEX_FIELDS = ("token_cbor_hex", "presentation_cbor_hex", "challenge_cbor_hex")
 

@@ -56,7 +56,7 @@ jobs:
         if: steps.probe.outputs.available != 'true'
         run: |
           {
-            echo "### ⚠ Reference run did not execute"
+            echo "### WARNING Reference run did not execute"
             echo
             echo "\`agentcreds\` is not installable from PyPI, so the vectors were **not**"
             echo "run against the reference implementation in this job. Only the"

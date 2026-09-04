@@ -11,6 +11,7 @@ Use this as the shape to copy, not as a base class.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import agentcreds as ac
@@ -52,6 +53,40 @@ class Adapter:
             depth=token.depth(),
             agent_dids=[e.agent_did for e in token.chain().entries],
         )
+
+    def verify_rotated_credential(
+        self, key_history_json: str, credential_json: str, root_did: str
+    ) -> bool:
+        # authorize_issuer does the whole relying-party check in one call: it verifies the
+        # sealed chain against the pinned root, enforces freshness, refuses a repudiated
+        # key, and returns the anchor to verify the credential with.
+        history = ac.KeyHistory.from_json(key_history_json)
+        vc = ac.CapabilityCredential.from_json(credential_json)
+        vc.verify(history.authorize_issuer(root_did, vc.issuer))
+        return True
+
+    def verify_approver_key_evidence(
+        self, evidence_json: str, directory_json: str, anchor_did: str, action
+    ) -> bool:
+        anchor = ac.TrustAnchor.from_did_key(anchor_did)
+        directory = ac.ApproverDirectory.from_json(directory_json)
+        evidence = ac.ApprovalEvidence.from_json(evidence_json)
+        evidence.verify_with_directory(
+            ac.Action(action.tool, action.parameters), directory, anchor, int(time.time())
+        )
+        return True
+
+    def verify_through_trust_framework(
+        self, config_json: str, credential_json: str, framework_did: str
+    ) -> bool:
+        framework = ac.TrustAnchor.from_did_key(framework_did)
+        config = ac.SignedTrustConfig.from_json(config_json)
+        config.verify_current(framework)  # authenticity AND freshness
+        registry = ac.TrustRegistry.from_config(config, framework)
+        vc = ac.CapabilityCredential.from_json(credential_json)
+        entry = registry.verify_credential(vc)  # membership + minimum trust level
+        vc.verify(ac.TrustAnchor.from_did_key(entry.did))
+        return True
 
     def revocation_lookup(self, list_json: str, anchor_did: str, index: int) -> bool:
         anchor = ac.TrustAnchor.from_did_key(anchor_did)
