@@ -29,22 +29,27 @@ class Adapter:
         ac.CapabilityCredential.from_json(credential_json).verify(anchor)
         return True
 
-    def verify_token(self, token_cbor, credential_json, anchor_did, action) -> bool:
+    def verify_token(self, token_cbor, credential_json, anchor_did, action, at) -> bool:
         anchor = ac.TrustAnchor.from_did_key(anchor_did)
         vc = ac.CapabilityCredential.from_json(credential_json)
         token = ac.DelegationToken.from_cbor(token_cbor)
-        # verify_rooted, not verify: the latter proves chain integrity but NOT that the
-        # root authority came from an anchor you trust.
-        token.verify_rooted(ac.Action(action.tool, action.parameters), vc, anchor)
+        # verify_rooted_at, not verify_rooted: `_rooted` binds the root authority to an
+        # anchor you trust (plain `verify` proves chain integrity only), and `_at` pins
+        # every expiry check to the vector file's `evaluated_at`. Tokens are capped at one
+        # hour by the autonomy ladder, so on the wall clock these vectors reject minutes
+        # after they are generated - see SPEC.md.
+        token.verify_rooted_at(ac.Action(action.tool, action.parameters), vc, anchor, at)
         return True
 
     def verify_presentation(
-        self, presentation_cbor, challenge_cbor, anchor_did, action, max_age_secs
+        self, presentation_cbor, challenge_cbor, anchor_did, action, max_age_secs, at
     ) -> bool:
         anchor = ac.TrustAnchor.from_did_key(anchor_did)
         pres = ac.Presentation.from_cbor(presentation_cbor)
         challenge = ac.PopChallenge.from_cbor(challenge_cbor)
-        pres.verify(ac.Action(action.tool, action.parameters), anchor, challenge, max_age_secs)
+        pres.verify_at(
+            ac.Action(action.tool, action.parameters), anchor, challenge, max_age_secs, at
+        )
         return True
 
     def token_chain(self, token_cbor) -> ChainInfo:
@@ -93,3 +98,6 @@ class Adapter:
         lst = ac.RevocationList.from_json(list_json)
         lst.verify(anchor)  # raises if not authentic - an unverified list answers nothing
         return lst.is_revoked(index)
+
+    def canonicalize(self, value) -> str:
+        return ac.jcs_canonicalize(value)

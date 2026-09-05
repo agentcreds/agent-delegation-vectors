@@ -61,19 +61,40 @@ example.
 The multi-hop cases carry the most weight. They exist because a wire-format change that
 broke *every* attenuated token once passed a suite whose token cases were all single-hop.
 
+## The second suite: canonicalization
+
+`jcs_vectors.json` is a separate, independently versioned suite of 16 cases. Each gives a
+JSON value and the exact RFC 8785 canonical string an implementation must emit for it -
+string equality, not JSON equivalence.
+
+It is here because the delegation suite structurally cannot catch what it tests. Actions
+are bound to *canonicalized* arguments, so two implementations that canonicalize
+differently compute different digests for the same call. They disagree about what a token
+authorizes while passing every delegation case, and the disagreement shows up later as a
+signature mismatch a long way from its cause.
+
+The cases look mundane, which is the point: key ordering, `café`, control-character
+escapes, `1.0` rendering as `1`, the boundary where `1e20` prints in full and `1e21` does
+not, negative zero, empty containers. Each is somewhere two reasonable implementations
+diverge without either looking wrong.
+
+[SPEC.md](SPEC.md) documents the file and states what agreement here does *not*
+establish - notably that agreeing on canonical output is not agreeing on *which* fields
+get canonicalized, which is part of the binding construction and outside these vectors.
+
 ## The adapter seam
 
-The harness drives an implementation through five methods
-([`runner/adapter.py`](runner/adapter.py)); it owns case selection, decoding, comparison
+The harness drives an implementation through the methods in
+[`runner/adapter.py`](runner/adapter.py); it owns case selection, decoding, comparison
 and reporting. Nothing an adapter does can change which cases run or what counts as a
 pass, so two adapters that both report 28/28 are measured identically.
 
 ```python
 class Adapter:
     def verify_credential(self, credential_json, anchor_did): ...
-    def verify_token(self, token_cbor, credential_json, anchor_did, action): ...
+    def verify_token(self, token_cbor, credential_json, anchor_did, action, at): ...
     def verify_presentation(self, presentation_cbor, challenge_cbor, anchor_did,
-                            action, max_age_secs): ...
+                            action, max_age_secs, at): ...
     def token_chain(self, token_cbor): ...
     def verify_rotated_credential(self, key_history_json, credential_json, root_did): ...
     def verify_approver_key_evidence(self, evidence_json, directory_json,
@@ -81,11 +102,24 @@ class Adapter:
     def verify_through_trust_framework(self, config_json, credential_json,
                                        framework_did): ...
     def revocation_lookup(self, list_json, anchor_did, index): ...
+    def canonicalize(self, value): ...          # optional; see below
 ```
 
 Each returns a plain bool (or, for `token_chain`, depth plus the ordered hop
 identifiers). Raising is treated as "reject", so an implementation that signals failure by
 exception needs no wrapper.
+
+`canonicalize` is the exception on both counts: it returns a string rather than a
+decision, and it is optional. An adapter that omits it is reported as **not having run**
+the canonicalization suite - not as failing it - because a suite nobody took should never
+be folded into a score.
+
+`at` is the file's `evaluated_at`, and it is not optional. Credentials here are minted a
+century out, but delegation tokens are capped at one hour by the autonomy ladder and
+cannot be - so the tokens expire an hour after the file is generated, and an adapter that
+verifies against the wall clock fails every accept case and passes every reject case for
+the wrong reason. Use the `_at` entry points. [SPEC.md](SPEC.md) explains why the second
+half of that is the dangerous half.
 
 The seam is deliberately transport-agnostic - an adapter may shell out to another language
 or call a service over HTTP - because the consumers are language bindings over a shared
@@ -120,9 +154,12 @@ does *not* establish.
 
 ## Current status
 
-The reference implementation passes **28/28**.
+The reference implementation passes **28/28** on the delegation suite and **16/16** on
+canonicalization.
 
-CI runs the structural validation of `vectors.json` on every push. It does **not** run the
+CI runs the structural validation of both vector files on every push, and checks that the
+runner's declared format constants match the files actually shipped - a runner that
+refuses its own vectors is a failure neither file can show on its own. It does **not** run the
 reference implementation, because that package is not published to a public index and
 there is no date for when it will be. The job reports itself as not executed rather than
 skipping quietly, so a green tick here never reads as "the reference implementation
@@ -130,11 +167,13 @@ passes." Should the package become installable, the job picks it up on its own.
 
 ## Provenance
 
-`vectors.json` is generated, never hand-edited, by the reference implementation's
-`gen_conformance_vectors` example. Keys are random per run, so regeneration rewrites the
-artifacts - they are golden *inputs*, not a fixed byte snapshot. The `format` field is the
-compatibility signal: a runner should refuse a file whose `format` it does not recognize
-rather than silently skipping unknown cases.
+Both vector files are generated, never hand-edited - `vectors.json` by the reference
+implementation's `gen_conformance_vectors` example, `jcs_vectors.json` from the
+canonicalization suite the three runtimes already share. Keys are random per run, so
+regenerating `vectors.json` rewrites the artifacts - they are golden *inputs*, not a fixed
+byte snapshot. The `format` field on each file is the compatibility signal: a runner should
+refuse a file whose `format` it does not recognize rather than silently skipping unknown
+cases. The two files version independently.
 
 Public cryptographic material only - `did:key` identifiers (which encode public keys;
 `did:key` cannot represent a private key), signatures, payload hashes and status lists. No

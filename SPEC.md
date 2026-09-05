@@ -7,6 +7,20 @@ conventions, or the credential schema. You can therefore verify an implementatio
 already have against these cases; you cannot write one from this document. See the README
 on why these are agreement vectors rather than conformance vectors.
 
+There are **two suites**, versioned independently:
+
+| file | suite | what it establishes |
+| --- | --- | --- |
+| `vectors.json` | delegation | Authorization decisions agree, case by case. |
+| `jcs_vectors.json` | canonicalization | Canonical JSON output agrees, byte for byte. |
+
+The second is not decoration. Actions are bound to *canonicalized* arguments, so two
+implementations that canonicalize differently compute different digests for the same call.
+They then disagree about what a token authorizes while passing every case in the
+delegation suite, and the disagreement surfaces later as a signature mismatch a long way
+from its cause. The delegation suite structurally cannot catch this, because both sides
+canonicalize with their own code before anything the delegation suite observes.
+
 `vectors.json` is a single JSON object. A runner reads `format`, refuses a version it
 does not recognize, then walks `cases` in order.
 
@@ -23,11 +37,40 @@ does not recognize, then walks `cases` in order.
 | --- | --- |
 | `format` | Integer. Incremented whenever a case gains a required field or a new `kind` appears. **Refuse an unrecognised value.** Skipping unknown cases silently reports success for checks that never ran. |
 | `generator` | Provenance string. Informational. |
+| `evaluated_at` | Unix seconds. **The instant every case must be judged as of.** Not informational - see below. |
 | `cases` | Ordered array. Each has `name` (unique) and `kind`. |
 
-All binary artifacts are lowercase hex, no prefix. All timestamps inside the artifacts
-are set a century out, so the file does not expire and freshness failures are never the
-reason a case rejects.
+All binary artifacts are lowercase hex, no prefix.
+
+## `evaluated_at` - read this before running anything
+
+**Verify as of `evaluated_at`, never against the wall clock.**
+
+Credentials in this file are minted a century out, so they do not expire. **Delegation
+tokens cannot be.** A token's lifetime is capped by the autonomy ladder - one hour at
+level 0, down to five minutes at level 3 - and that cap is a security control the vectors
+do not get to opt out of. So the tokens in this file expire an hour after it was
+generated, and there is no way to generate them otherwise.
+
+A harness that uses the wall clock therefore reports, on any file more than an hour old:
+
+- every **accept** case as a failure, because the token has expired; and
+- every **reject** case as a pass, **for the wrong reason** - expiry, not the narrowing,
+  wrong anchor or out-of-scope action the case exists to check.
+
+The second half is the dangerous one. The run still produces a score, the score is not
+zero, and nothing in the output says the rejections were spurious. This happened: the
+harness in this repository called the wall-clock verify and reported 23/28, in which four
+of the passes established nothing.
+
+Implementations expose this as a separate entry point - `verify_rooted_at`,
+`verifyRootedAt`, `Presentation::verify_at` and equivalents - taking the instant as an
+argument. One instant must govern the credential, every hop, the Datalog time check and
+any proof-of-possession freshness window; a case judged half against `evaluated_at` and
+half against the clock is not a result.
+
+A runner that finds no `evaluated_at` must **refuse to run**, not substitute a guess. The
+file's modification time and "now" are both plausible and both wrong.
 
 ## Common fields
 
@@ -246,9 +289,61 @@ narrower than the draft's requirements, and passing them is not conformance to i
 R3, R5, R6, R8 and R9 are **not** covered. Anyone reporting results against these
 vectors should say so rather than let "28/28" imply more than it does.
 
+## The canonicalization suite - `jcs_vectors.json`
+
+A separate file with its own `format`, currently **1**.
+
+```json
+{
+  "format": 1,
+  "profile": "agentcreds-jcs-v1",
+  "spec": "RFC 8785 (JSON Canonicalization Scheme)",
+  "note": "...",
+  "cases": [ { "value": {"q": "café"}, "expected_jcs": "{\"q\":\"café\"}" } ]
+}
+```
+
+| field | meaning |
+| --- | --- |
+| `format` | Integer, versioned independently of `vectors.json`. Refuse an unrecognised value. |
+| `profile` | The canonicalization profile these outputs belong to. |
+| `spec` | The specification the profile follows. |
+| `cases` | Ordered array. Each has `value` and `expected_jcs`. |
+
+### The obligation
+
+For each case: canonicalize `value` and emit **exactly** `expected_jcs`. String equality,
+not JSON equivalence - the whole point is the byte sequence, so a result that parses to
+the same document but orders keys differently, escapes differently, or renders a number
+differently is a failure.
+
+Cases are ordinary-looking on purpose. The suite covers key ordering, non-ASCII
+(`café`, `naïve résumé`), control-character escaping, the integer/float boundary
+(`1.0` → `1`), the point where large numbers switch to exponent form (`1e20` renders in
+full, `1e21` does not), negative zero, and empty containers. Each is a place two
+reasonable implementations diverge without either being obviously wrong.
+
+### What it does not establish
+
+Agreement on canonical output is **not** agreement on what gets canonicalized. Which
+fields of an action are included, and in what structure, is part of the binding
+construction and is outside these vectors entirely. Two implementations can pass every
+case here and still disagree about a call, if they disagree about which arguments the
+digest covers.
+
+### Not implementing it
+
+The suite is optional for an adapter, and a runner must report an adapter that omits it as
+**not having run** rather than folding a zero into a score. An untaken suite reported as a
+pass is the failure mode this repository exists to avoid.
+
 ## Adding a case
 
 Cases are generated, not written. Extend the generator in the reference implementation,
 regenerate, bump `format` if any runner would need to change, and update this document -
 a case whose obligation is not written down here is not testable by anyone who did not
 write it.
+
+The two suites version independently, and a runner declares which formats it accepts for
+each. CI checks those declarations against the shipped files: a runner that refuses its own
+vectors is a failure the vector file alone cannot show, and it has happened before.

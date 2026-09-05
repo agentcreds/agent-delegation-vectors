@@ -46,13 +46,21 @@ class Implementation(Protocol):
         credential_json: str,
         anchor_did: str,
         action: Action,
+        at: int,
     ) -> bool:
-        """Verify `action` against an anchor-rooted delegation token.
+        """Verify `action` against an anchor-rooted delegation token, **as of** `at`.
 
         The full relying-party check: the credential verifies under the anchor, the token
         derives from it, the root hop was minted by the credential subject, and `action`
         survives every hop's narrowing. Verifying the chain's internal integrity alone is
         NOT sufficient - it would accept a chain rooted in an anchor you do not trust.
+
+        `at` is the vector file's `evaluated_at`, in Unix seconds, and every expiry check
+        must be evaluated against it rather than the wall clock. This is not a convenience:
+        delegation tokens are capped at one hour by the autonomy ladder and cannot be
+        minted far-future the way credentials can, so a harness that uses the wall clock
+        sees every accept case reject shortly after the file is generated - and every
+        reject case pass for the wrong reason. See SPEC.md.
         """
         ...
 
@@ -63,11 +71,16 @@ class Implementation(Protocol):
         anchor_did: str,
         action: Action,
         max_age_secs: int,
+        at: int,
     ) -> bool:
-        """Verify a presentation (token + credential + proof of possession).
+        """Verify a presentation (token + credential + proof of possession), as of `at`.
 
         The proof is over the **leaf** key of the chain. On a multi-hop chain that is the
         last delegate, not the original credential subject.
+
+        One instant must govern the credential, every hop, the Datalog time check and the
+        proof's own freshness window - a presentation judged half against `at` and half
+        against the wall clock is not a meaningful result.
         """
         ...
 
@@ -147,5 +160,24 @@ class Implementation(Protocol):
         """Verify a signed status list against `anchor_did`, then report whether `index`
         reads as revoked. Raise if the list does not verify - an unverified list must not
         answer lookups at all.
+        """
+        ...
+
+    def canonicalize(self, value) -> str:
+        """Return the RFC 8785 canonical JSON form of `value`, a decoded JSON document
+        (dict, list, str, int, float, bool or None).
+
+        Unlike every other method here this one returns bytes-as-a-string rather than a
+        decision, because it is not asked to decide anything - it is asked to agree,
+        exactly. Actions are bound to canonicalized arguments, so an implementation whose
+        canonical form differs by one escape or one float rendering computes a different
+        digest for the same call. It will then disagree with its peers about what a token
+        authorizes while passing every delegation case above, and the disagreement will
+        surface as a signature mismatch far from its cause.
+
+        This method is OPTIONAL. An adapter that omits it is reported as not having run
+        the canonicalization suite, which is different from failing it - the runner will
+        not fold an untaken suite into a score. Omit it only if the implementation
+        genuinely does not canonicalize.
         """
         ...
