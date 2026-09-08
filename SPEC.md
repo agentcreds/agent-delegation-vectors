@@ -13,6 +13,7 @@ There are **two suites**, versioned independently:
 | --- | --- | --- |
 | `vectors.json` | delegation | Authorization decisions agree, case by case. |
 | `jcs_vectors.json` | canonicalization | Canonical JSON output agrees, byte for byte. |
+| `a2a_vectors.json` | A2A layer | The agent-to-agent header/envelope layer above the cryptography - header names, the principal-header scheme, bound-args encoding, the deny-code registry, and octets parse/semantic-equality verdicts - agrees across runtimes. Deterministic string/JSON contracts only: no keys and no clock, so unlike the delegation suite it never expires. Octets bind *output* is deliberately not asserted (the profile makes serialization holder-chosen); only parse + semantic agreement is a contract. |
 
 The second is not decoration. Actions are bound to *canonicalized* arguments, so two
 implementations that canonicalize differently compute different digests for the same call.

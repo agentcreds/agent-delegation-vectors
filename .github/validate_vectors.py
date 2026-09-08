@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SUPPORTED_FORMAT = 3
 SUPPORTED_JCS_FORMAT = 1
+SUPPORTED_A2A_FORMAT = 1
 
 COMMON = {"name", "kind", "anchor_did"}
 REQUIRED = {
@@ -39,6 +40,32 @@ REQUIRED = {
     "trust_config": COMMON | {"config_json", "credential_json", "expect"},
 }
 HEX_FIELDS = ("token_cbor_hex", "presentation_cbor_hex", "challenge_cbor_hex")
+
+
+def check_a2a(errors: "list[str]") -> bool:
+    """Validate the A2A-layer suite. Unlike the other two it needs no runner - both
+    runtimes consume it in their own test suites - so this checks shape only: the file
+    parses, declares a supported format, and carries the sections SPEC.md names."""
+    path = ROOT / "a2a_vectors.json"
+    if not path.exists():
+        errors.append("a2a_vectors.json is missing")
+        return False
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    if doc.get("format") != SUPPORTED_A2A_FORMAT:
+        errors.append(
+            f"a2a_vectors.json: format is {doc.get('format')!r}, expected {SUPPORTED_A2A_FORMAT}"
+        )
+        return False
+    required = {
+        "header_names", "principal_scheme_prefix", "codes", "octets_profile",
+        "max_bound_args_bytes", "principal_headers", "malformed_principal_headers",
+        "bound_args_headers", "octets_parse_semantic",
+    }
+    missing = required - set(doc.get("cases") or {})
+    if missing:
+        errors.append(f"a2a_vectors.json: missing sections {sorted(missing)}")
+        return False
+    return True
 
 
 def check_runner_agrees(errors: "list[str]") -> None:
@@ -182,6 +209,7 @@ def main() -> int:
             )
 
     jcs_count = check_jcs(errors)
+    a2a_ok = check_a2a(errors)
     check_runner_agrees(errors)
 
     if errors:
@@ -193,6 +221,8 @@ def main() -> int:
     kinds = sorted({c["kind"] for c in cases})
     print(f"vectors.json OK: format {suite['format']}, {len(cases)} cases, kinds {kinds}")
     print(f"jcs_vectors.json OK: format {SUPPORTED_JCS_FORMAT}, {jcs_count} cases")
+    if a2a_ok:
+        print(f"a2a_vectors.json OK: format {SUPPORTED_A2A_FORMAT}")
     print("runner format constants agree with both files")
     return 0
 

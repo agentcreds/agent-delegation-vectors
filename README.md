@@ -13,6 +13,11 @@ one surface verifies identically through another, and keeps doing so as the code
 python runner/run_vectors.py --adapter runner/adapters/agentcreds_adapter.py
 ```
 
+Checking a different implementation means writing an adapter - one Python file, eight
+methods, subprocess-friendly for implementations in other languages.
+**[ADAPTERS.md](ADAPTERS.md)** is the step-by-step tutorial, including the failure
+signatures and what each one means.
+
 ## What these are, and are not
 
 **These are agreement vectors, not conformance vectors.** The distinction is not
@@ -159,11 +164,13 @@ canonicalization.
 
 CI runs the structural validation of both vector files on every push, and checks that the
 runner's declared format constants match the files actually shipped - a runner that
-refuses its own vectors is a failure neither file can show on its own. It does **not** run the
-reference implementation, because that package is not published to a public index and
-there is no date for when it will be. The job reports itself as not executed rather than
-skipping quietly, so a green tick here never reads as "the reference implementation
-passes." Should the package become installable, the job picks it up on its own.
+refuses its own vectors is a failure neither file can show on its own.
+
+It does **not** yet run the reference implementation, because that package is not on PyPI
+at the time of writing. The job reports itself as not executed rather than skipping
+quietly, so a green tick here never reads as "the reference implementation passes." It
+probes the index on every run and starts exercising the vectors on its own the moment the
+package is installable - no change here is needed.
 
 ## Provenance
 
