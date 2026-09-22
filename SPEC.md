@@ -288,7 +288,7 @@ narrower than the draft's requirements, and passing them is not conformance to i
 | R10 execution-time authorization | `approval_key_*` - per-approver evidence checked against a signed directory | the *gate* mechanics (which tokens designate approval), one-time reliance, and the approval workflow itself |
 
 R3, R5, R6, R8 and R9 are **not** covered. Anyone reporting results against these
-vectors should say so rather than let "28/28" imply more than it does.
+vectors should say so rather than let "29/29" imply more than it does. Say which release, too: "29/29 on draft-02.0" is checkable, "passes the vectors" is not.
 
 ## The canonicalization suite - `jcs_vectors.json`
 

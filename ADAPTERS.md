@@ -176,9 +176,11 @@ Failure patterns map to causes with unusual reliability here:
 
 ## What a pass entitles you to say
 
-28/28 plus the canonicalization suite means: *"our implementation reaches the same
-authorization decisions as the AgentCreds reference implementation on these cases,
-and canonicalizes identically."* That is a real, useful interoperability claim - it
+29/29 plus the canonicalization suite, **on a named release**, means: *"our
+implementation reaches the same authorization decisions as the AgentCreds reference
+implementation on the `draft-02.0` cases, and canonicalizes identically."* Name the
+release (the git tag; `RELEASE.json` carries it) - the vectors are regenerated over time,
+and a result without a release name cannot be reproduced. That is a real, useful interoperability claim - it
 is what lets a token minted by one side verify on the other. It is not a conformance
 claim, because there is no published wire-format standard here to conform to; see
 README.md. If that changes, this file changes.

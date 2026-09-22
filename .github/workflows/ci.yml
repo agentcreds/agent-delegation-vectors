@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["draft-*"]
   pull_request:
   workflow_dispatch:
 
@@ -26,6 +27,19 @@ jobs:
           python-version: "3.12"
       - name: Structural validation
         run: python .github/validate_vectors.py
+      # The release manifest names the exact bytes of every vector file. Two checks, one
+      # in Python and one with nothing but coreutils, so a reader can reproduce the
+      # second on any machine and trust that RELEASE.json means what it says.
+      - name: Release manifest matches the files (RELEASE.json, SHA256SUMS)
+        run: |
+          python release.py --check
+          sha256sum -c SHA256SUMS
+      # A tag is a release name, and a release name means one set of bytes forever. The
+      # tag must therefore be cut from a commit whose RELEASE.json says the same name;
+      # anything else is a tag pointing at bytes it does not describe.
+      - name: Tag names the manifest's release
+        if: startsWith(github.ref, 'refs/tags/draft-')
+        run: python release.py --tag-matches "${GITHUB_REF_NAME}"
 
   # Then the reference run: the published SDK through the published adapter. This is the
   # claim the repository makes about itself - if the reference implementation cannot pass
@@ -68,8 +82,32 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::notice title=Reference run skipped::agentcreds is not on PyPI; vectors were not run against the reference implementation."
 
+      # The vectors are the standard; the reference implementation is one consumer of
+      # them, released on its own schedule. A release of the vectors can therefore be
+      # ahead of the package on PyPI, and that is a fact about the package, not a defect
+      # in the vectors - so this step reports, prominently, and does not fail the
+      # workflow. The validate job above is what says whether THIS repository is sound.
       - name: Run the vectors against the reference implementation
         if: steps.probe.outputs.available == 'true'
+        id: run
+        continue-on-error: true
         run: |
           pip install agentcreds
-          python runner/run_vectors.py --adapter runner/adapters/agentcreds_adapter.py
+          echo "version=$(pip show agentcreds | sed -n 's/^Version: //p')" >> "$GITHUB_OUTPUT"
+          python runner/run_vectors.py --adapter runner/adapters/agentcreds_adapter.py | tee run.log
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Report the reference result
+        if: steps.probe.outputs.available == 'true'
+        run: |
+          rel="$(python -c 'import json;print(json.load(open("RELEASE.json"))["release"])')"
+          ver="${{ steps.run.outputs.version }}"
+          res="$(grep -E '^(DELEGATION|CANONICALIZATION):' run.log | paste -sd ' ')"
+          if [ "${{ steps.run.outcome }}" = "success" ]; then
+            echo "### Reference implementation agentcreds $ver passes $rel" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Reference run::agentcreds $ver on $rel - $res"
+          else
+            echo "### WARNING agentcreds $ver does NOT pass $rel" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Reference implementation behind the vectors::agentcreds $ver on $rel - $res The vectors are released independently of the package; a package release that passes is the follow-up."
+          fi
+          fence='```'
+          { echo; echo "$fence"; grep -E '^(  FAIL|DELEGATION|CANONICALIZATION|  failed)' run.log; echo "$fence"; } >> "$GITHUB_STEP_SUMMARY"
