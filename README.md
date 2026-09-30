@@ -94,6 +94,11 @@ The harness drives an implementation through the methods in
 and reporting. Nothing an adapter does can change which cases run or what counts as a
 pass, so two adapters that both report 29/29 are measured identically.
 
+Each case also states its `authority_scope` (class_scoped, instance_bound, or
+neutral - defined in [SPEC.md](SPEC.md)). Results for `instance_bound` cases
+should say whether the implementation enforces the boundary by construction or
+by check.
+
 ```python
 class Adapter:
     def verify_credential(self, credential_json, anchor_did): ...
