@@ -272,6 +272,62 @@ Two mistakes these are shaped to catch, both of which pass every accept case:
 - **Reading membership but not the trust level.** Easy to do, and it silently admits
   under-verified organizations. Only `reject_below_minimum_level` catches it.
 
+## Authority scope
+
+Every case carries an `authority_scope` field stating which side of the reuse
+boundary it exercises. The vocabulary comes from the announcement thread on the
+WIMSE list (September 2026): Elena Tanase asked for the boundary to be explicit,
+and Theo Adam's implementation report showed why - an evaluation path that matched
+approval evidence by action fingerprint, requester, and delegation, but not by
+action instance, silently authorized a second action with identical class
+coordinates.
+
+- **class_scoped** - the authority exercised describes a class of permitted
+  actions. Satisfying it for one conforming instance implies nothing about others
+  being excluded; reuse within the stated bounds is intentional. Credentials,
+  delegation tokens, and scope narrowing are class-scoped by construction (R1).
+- **instance_bound** - the authority or evidence exercised is bound to one action
+  instance. Evidence that satisfies one instance MUST NOT satisfy any other,
+  even when the fingerprint, requester, and invoked delegation are otherwise
+  identical. Proof of possession over an exact request (R4) and designated
+  execution-time authorization evidence (R10) are instance-bound by construction.
+- **neutral** - the case establishes a validity, resolution, or lifecycle
+  property and does not exercise the reuse boundary in either direction. The
+  value is explicit rather than omitted so runners can check field coverage
+  mechanically.
+
+| case | authority_scope |
+| --- | --- |
+| `presentation_accept` | instance_bound |
+| `presentation_reject_denied_tool` | class_scoped |
+| `presentation_reject_wrong_anchor` | neutral |
+| `credential_accept` | class_scoped |
+| `credential_reject_wrong_anchor` | neutral |
+| `token_accept_permitted_action` | class_scoped |
+| `token_reject_denied_action` | class_scoped |
+| `token_multihop_accept` | class_scoped |
+| `token_multihop_parent_allows_before_attenuation` | class_scoped |
+| `token_multihop_reject_attenuated_away` | class_scoped |
+| `presentation_multihop_accept` | class_scoped |
+| `token_chain_multihop` | class_scoped |
+| `key_history_accept_rotated_issuer` | neutral |
+| `key_history_accept_superseded_issuer` | neutral |
+| `key_history_reject_repudiated_issuer` | neutral |
+| `key_history_accept_current_after_repudiation` | neutral |
+| `key_history_reject_foreign_issuer` | neutral |
+| `key_history_reject_unsealed_history` | neutral |
+| `key_history_reject_wrong_root` | neutral |
+| `approval_key_accept_enrolled_approver` | instance_bound |
+| `approval_key_reject_unenrolled_approver` | neutral |
+| `approval_key_reject_different_action` | instance_bound |
+| `approval_key_reject_wrong_anchor` | neutral |
+| `trust_config_accept_member` | neutral |
+| `trust_config_reject_below_minimum_level` | neutral |
+| `trust_config_reject_non_member` | neutral |
+| `trust_config_reject_wrong_framework` | neutral |
+| `revocation_lookup` | neutral |
+| `revocation_lookup_p256` | neutral |
+
 ## Relationship to `draft-reece-wimse-cross-org-delegation`
 
 These vectors check that two implementations agree on bytes and decisions. That is
